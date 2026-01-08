@@ -7,8 +7,9 @@ import '../services/storage_service.dart';
 class AddEntryDialog extends StatefulWidget {
   final TimeEntry? entry;
   final DateTime selectedDate;
+  final List<ActivityCategory> categories;
 
-  const AddEntryDialog({super.key, this.entry, required this.selectedDate});
+  const AddEntryDialog({super.key, this.entry, required this.selectedDate, required this.categories});
 
   @override
   State<AddEntryDialog> createState() => _AddEntryDialogState();
@@ -30,7 +31,7 @@ class _AddEntryDialogState extends State<AddEntryDialog> {
     _activityController = TextEditingController(
       text: widget.entry?.activityName ?? '',
     );
-    _selectedCategory = widget.entry?.category ?? ActivityCategory.other;
+    _selectedCategory = widget.entry?.category ?? widget.categories.firstWhere((c) => c.id == 'other', orElse: () => widget.categories.first);
     _selectedDate = widget.entry?.startTime ?? widget.selectedDate;
     _startTime = widget.entry != null
         ? TimeOfDay.fromDateTime(widget.entry!.startTime)
@@ -91,7 +92,7 @@ class _AddEntryDialogState extends State<AddEntryDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Category',
                 ),
-                items: ActivityCategory.values.map((category) {
+                items: widget.categories.map((category) {
                   return DropdownMenuItem(
                     value: category,
                     child: Text(category.displayName),

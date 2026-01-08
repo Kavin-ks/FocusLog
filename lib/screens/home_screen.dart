@@ -49,7 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadEntries() async {
     setState(() => _loading = true);
-    final entries = await _storage.loadEntries(_selectedDate);
+    final entries = await _storage.loadEntries(_selectedDate, _settings?.customCategories);
     entries.sort((a, b) => a.startTime.compareTo(b.startTime));
     setState(() {
       _entries = entries;
@@ -63,40 +63,40 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _showInsights = true;
 
-  /// Generate short, rule-based, plain-language insights about the selected day.
-  ///
-  /// Rules are intentionally simple and transparent (no AI or scoring):
-  /// - If a majority of 'focused' time (study/work) occurred when energy was high,
-  ///   report that.
-  /// - If a large portion (>=50%) of unintentional time happened in one part of day,
-  ///   report which part (morning/afternoon/evening/night).
   List<String> _generateInsights() {
     final entries = _entriesForSelectedDate;
-    // totalMinutes is not required here; computed in callers when needed
+    // Require sufficient data to avoid insights on sparse days
+    final totalMinutes = entries.fold<int>(0, (s, e) => s + e.durationMinutes);
+    if (entries.length < 3 || totalMinutes < 60) {
+      return [];
+    }
 
-    final focusedCats = {ActivityCategory.study, ActivityCategory.work};
-    final focusedMinutes = entries
-        .where((e) => focusedCats.contains(e.category))
-        .fold<int>(0, (s, e) => s + e.durationMinutes);
-
-    // Focused + energy insight
-    // Rule: If at least 60% of focused minutes were logged when energy was "High",
-    // we show a simple, neutral statement about that. Thresholds are intentionally
-    // conservative and transparent.
-    if (focusedMinutes > 0) {
-      final focusedHigh = entries
-          .where((e) => focusedCats.contains(e.category) && e.energyLevel == EnergyLevel.high)
-          .fold<int>(0, (s, e) => s + e.durationMinutes);
-
-      final ratio = focusedHigh / focusedMinutes;
-      if (ratio >= 0.6) {
-        return ['Most focused time was recorded when energy was high.'];
+    final categoryTotals = <ActivityCategory, int>{};
+    for (final e in entries) {
+      categoryTotals[e.category] = (categoryTotals[e.category] ?? 0) + e.durationMinutes;
+    }
+    final sortedCategories = categoryTotals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    if (sortedCategories.isNotEmpty) {
+      final dominantCategory = sortedCategories.first.key;
+      // Skip if dominant category is scroll (unintentional browsing)
+      if (dominantCategory.id != 'scroll') {
+        final dominantMinutes = sortedCategories.first.value;
+        final dominantHigh = entries
+            .where((e) => e.category == dominantCategory && e.energyLevel == EnergyLevel.high)
+            .fold<int>(0, (s, e) => s + e.durationMinutes);
+        
+        final ratio = dominantHigh / dominantMinutes;
+        if (ratio >= 0.6) {
+          return ['Most time in ${dominantCategory.displayName.toLowerCase()} was recorded when energy was high.'];
+        }
       }
     }
 
-    // Unintentional time by time-of-day insight
-    // Rule: If 50% or more of unintentional minutes happened in a single
-    // time-of-day bucket (morning/afternoon/evening/night), we report that.
+    // Rule 2: Unintentional timing pattern
+    // Check if unintentional time clusters in one time-of-day bucket
+    // 50% represents clear majority concentration
     final unintentionalEntries = entries.where((e) => e.intent == IntentTag.unintentional).toList();
     final unintentionalTotal = unintentionalEntries.fold<int>(0, (s, e) => s + e.durationMinutes);
     if (unintentionalTotal > 0) {
@@ -127,14 +127,15 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
-    // If no specific insights, return an empty list (so UI can show a gentle message)
+    // No insights if no rules match
     return [];
   }
 
   Future<void> _openAddDialog([TimeEntry? existing]) async {
+    final allCategories = <ActivityCategory>[...ActivityCategory.builtInCategories, ...(_settings?.customCategories ?? [])];
     final result = await showDialog<Object?>(
       context: context,
-      builder: (_) => AddEntryDialog(entry: existing, selectedDate: _selectedDate),
+      builder: (_) => AddEntryDialog(entry: existing, selectedDate: _selectedDate, categories: allCategories),
     );
 
     if (result != null) {
@@ -321,7 +322,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (context) => const WeeklyOverviewScreen(),
+                  builder: (context) => WeeklyOverviewScreen(customCategories: _settings?.customCategories ?? []),
                 ),
               );
             },
@@ -361,11 +362,15 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        // Responsive horizontal padding: 20 on mobile, 40 on larger screens for better readability
+        // Vertical padding remains 12 for consistent top/bottom spacing
+        padding: EdgeInsets.symmetric(horizontal: MediaQuery.of(context).size.width > 600 ? 40 : 20, vertical: 12),
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
+                // SingleChildScrollView allows content to scroll on smaller screens while maintaining full height on larger ones
                 child: Column(
+                  // CrossAxisAlignment.start aligns content to the left, creating a clean, readable layout
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Date selector

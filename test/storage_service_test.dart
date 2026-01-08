@@ -28,7 +28,7 @@ void main() {
     final storage = StorageService();
     final date = DateTime(2026, 1, 8);
 
-    final entries = await storage.loadEntries(date);
+    final entries = await storage.loadEntries(date, []);
     expect(entries.length, equals(1));
 
     final e = entries.first;

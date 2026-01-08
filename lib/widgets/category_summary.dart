@@ -13,15 +13,14 @@ class CategorySummary extends StatelessWidget {
       totals[e.category] = (totals[e.category] ?? 0) + e.durationMinutes;
     }
 
-    final list = ActivityCategory.values.map((cat) {
-      final minutes = totals[cat] ?? 0;
-      return MapEntry(cat, minutes);
-    }).toList();
+    final list = totals.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
 
     return Card(
+      // Card provides visual separation and elevation for the summary section
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          // CrossAxisAlignment.start left-aligns content for consistent, scannable layout
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('By category', style: Theme.of(context).textTheme.headlineMedium),
@@ -31,13 +30,13 @@ class CategorySummary extends StatelessWidget {
               final hours = minutes ~/ 60;
               final mins = minutes % 60;
               return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   children: [
                     Container(width: 8, height: 8, color: _categoryColor(entry.key)),
                     const SizedBox(width: 12),
                     Expanded(child: Text(entry.key.displayName, style: Theme.of(context).textTheme.bodyLarge)),
-                    Text(hours > 0 ? '$hours h $mins min' : '$mins min', style: Theme.of(context).textTheme.bodyMedium),
+                    Text(hours > 0 ? '$hours h $mins min' : '$mins min', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
                   ],
                 ),
               );
@@ -49,17 +48,6 @@ class CategorySummary extends StatelessWidget {
   }
 
   Color _categoryColor(ActivityCategory category) {
-    switch (category) {
-      case ActivityCategory.study:
-        return const Color(0xFF4CAF50);
-      case ActivityCategory.work:
-        return const Color(0xFF2196F3);
-      case ActivityCategory.rest:
-        return const Color(0xFFFF9800);
-      case ActivityCategory.scroll:
-        return const Color(0xFF9C27B0);
-      case ActivityCategory.other:
-        return const Color(0xFF757575);
-    }
+    return category.color ?? const Color(0xFF607D8B);
   }
 }

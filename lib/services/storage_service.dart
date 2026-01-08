@@ -33,7 +33,7 @@ class StorageService {
     return 'time_entries_${date.year}_${date.month}_${date.day}';
   }
 
-  Future<List<TimeEntry>> loadEntries(DateTime date) async {
+  Future<List<TimeEntry>> loadEntries(DateTime date, [List<ActivityCategory>? customCategories]) async {
     final prefs = await SharedPreferences.getInstance();
     final key = _getEntriesKeyForDate(date);
     final String? entriesJson = prefs.getString(key);
@@ -89,7 +89,7 @@ class StorageService {
 
         // Parse into TimeEntry using existing normalization logic. If parsing
         // fails (bad dates, etc.) we'll skip the entry rather than crash.
-        final entry = TimeEntry.fromJson(map);
+        final entry = TimeEntry.fromJson(map, customCategories);
         entries.add(entry);
       } catch (_) {
         // Parsing failed for this entry: skip and continue
@@ -209,7 +209,7 @@ class StorageService {
           final energyName = entry.energyLevel?.name ?? '';
           final intentName = entry.intent?.name ?? '';
           buffer.writeln(
-              '$dateKey,${entry.id},${entry.startTime.toIso8601String()},${entry.endTime.toIso8601String()},"${_escapeCsv(entry.activityName)}",${entry.category.name},${entry.durationMinutes},$energyName,$intentName');
+              '$dateKey,${entry.id},${entry.startTime.toIso8601String()},${entry.endTime.toIso8601String()},"${_escapeCsv(entry.activityName)}",${entry.category.id},${entry.durationMinutes},$energyName,$intentName');
         }
       }
     }
@@ -234,6 +234,46 @@ class StorageService {
     for (final key in keys) {
       if (key.startsWith('time_entries_') || key.startsWith('${_reflectionKey}_')) {
         await prefs.remove(key);
+      }
+    }
+  }
+
+  Future<bool> isCategoryUsed(String categoryId) async {
+    // Check if a category ID is referenced by any stored time entries
+    // Used before deleting custom categories to prevent accidental data loss
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys().where((k) => k.startsWith('time_entries_')).toList();
+    for (final key in keys) {
+      final entriesJson = prefs.getString(key);
+      if (entriesJson == null) continue;
+      final List<dynamic> decoded = jsonDecode(entriesJson);
+      for (final e in decoded) {
+        if (e['category'] == categoryId) return true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> reassignCategory(String oldCategoryId, String newCategoryId) async {
+    // When a custom category is deleted but still in use, reassign all entries
+    // using the old category ID to a new category ID. This preserves data integrity
+    // by updating all historical entries across all dates.
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys().where((k) => k.startsWith('time_entries_')).toList();
+    for (final key in keys) {
+      final entriesJson = prefs.getString(key);
+      if (entriesJson == null) continue;
+      final List<dynamic> decoded = jsonDecode(entriesJson);
+      bool changed = false;
+      final updated = decoded.map((e) {
+        if (e['category'] == oldCategoryId) {
+          changed = true;
+          return {...e, 'category': newCategoryId};
+        }
+        return e;
+      }).toList();
+      if (changed) {
+        await prefs.setString(key, jsonEncode(updated));
       }
     }
   }

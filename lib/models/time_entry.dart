@@ -1,30 +1,45 @@
-enum ActivityCategory {
-  study,
-  work,
-  rest,
-  scroll,
-  other,
+import 'dart:ui';
+
+class ActivityCategory {
+  final String id;
+  final String displayName;
+  final bool isBuiltIn;
+  final Color? color;
+
+  const ActivityCategory(this.id, this.displayName, {this.isBuiltIn = false, this.color});
+
+  // Built-in categories with default muted colors
+  static final study = ActivityCategory('study', 'Study', isBuiltIn: true, color: const Color(0xFF4CAF50));
+  static final work = ActivityCategory('work', 'Work', isBuiltIn: true, color: const Color(0xFF2196F3));
+  static final rest = ActivityCategory('rest', 'Rest', isBuiltIn: true, color: const Color(0xFFFF9800));
+  static final scroll = ActivityCategory('scroll', 'Scroll', isBuiltIn: true, color: const Color(0xFF9C27B0));
+  static final other = ActivityCategory('other', 'Other', isBuiltIn: true, color: const Color(0xFF757575));
+
+  static List<ActivityCategory> get builtInCategories => [study, work, rest, scroll, other];
+
+  @override
+  bool operator ==(Object other) => other is ActivityCategory && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'displayName': displayName,
+        'isBuiltIn': isBuiltIn,
+        'color': color?.toARGB32(),
+      };
+
+  factory ActivityCategory.fromJson(Map<String, dynamic> json) =>
+      ActivityCategory(
+        json['id'],
+        json['displayName'],
+        isBuiltIn: json['isBuiltIn'] ?? false,
+        color: json['color'] != null ? Color(json['color']) : null,
+      );
 }
 
-extension ActivityCategoryExtension on ActivityCategory {
-  String get displayName {
-    switch (this) {
-      case ActivityCategory.study:
-        return 'Study';
-      case ActivityCategory.work:
-        return 'Work';
-      case ActivityCategory.rest:
-        return 'Rest';
-      case ActivityCategory.scroll:
-        return 'Scroll';
-      case ActivityCategory.other:
-        return 'Other';
-    }
-  }
-}
 
-/// Energy levels are optional, neutral descriptors of how the user felt during
-/// an activity. They are intentionally minimal and non-judgmental.
 enum EnergyLevel { low, neutral, high }
 
 extension EnergyLevelExtension on EnergyLevel {
@@ -40,8 +55,6 @@ extension EnergyLevelExtension on EnergyLevel {
   }
 }
 
-/// IntentTag is an optional, neutral tag indicating whether an activity was
-/// intentionally started or not. It's deliberately minimal and non-judgmental.
 enum IntentTag { intentional, unintentional }
 
 extension IntentTagExtension on IntentTag {
@@ -103,7 +116,7 @@ class TimeEntry {
       'startTime': n.startTime.toIso8601String(),
       'endTime': n.endTime.toIso8601String(),
       'activityName': activityName,
-      'category': category.name,
+      'category': category.id,
       'energy': energyLevel?.name, // may be null
       'intent': intent?.name, // may be null
     };
@@ -113,13 +126,11 @@ class TimeEntry {
   ///
   /// Normalization rules applied here:
   /// - If `endTime` is earlier than `startTime` we interpret the entry as
-  ///   crossing midnight and treat the end time as occurring on the next day.
-  ///   This preserves the intended duration for entries saved without a
-  ///   next-day date (e.g. start 23:30, end 01:15).
+ 
   /// - Optional fields (`energy`, `intent`) are treated as nullable. If the
   ///   stored value is missing or invalid we preserve them as `null` instead
-  ///   of defaulting to a non-null sentinel value.
-  factory TimeEntry.fromJson(Map<String, dynamic> json) {
+  
+  factory TimeEntry.fromJson(Map<String, dynamic> json, [List<ActivityCategory>? customCategories]) {
     final id = json['id'] as String;
 
     final start = DateTime.parse(json['startTime'] as String);
@@ -130,10 +141,17 @@ class TimeEntry {
       end = end.add(const Duration(days: 1));
     }
 
-    final category = ActivityCategory.values.firstWhere(
-      (e) => e.name == json['category'],
-      orElse: () => ActivityCategory.other,
-    );
+    final categoryId = json['category'] as String;
+    ActivityCategory category;
+    try {
+      category = ActivityCategory.builtInCategories.firstWhere((c) => c.id == categoryId);
+    } catch (_) {
+      try {
+        category = customCategories!.firstWhere((c) => c.id == categoryId);
+      } catch (_) {
+        category = ActivityCategory(categoryId, categoryId);
+      }
+    }
 
     EnergyLevel? energyLevel;
     if (json.containsKey('energy') && json['energy'] != null) {

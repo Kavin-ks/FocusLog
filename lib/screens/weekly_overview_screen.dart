@@ -5,7 +5,9 @@ import '../models/time_entry.dart';
 import '../services/storage_service.dart';
 
 class WeeklyOverviewScreen extends StatefulWidget {
-  const WeeklyOverviewScreen({super.key});
+  final List<ActivityCategory> customCategories;
+
+  const WeeklyOverviewScreen({super.key, this.customCategories = const []});
 
   @override
   State<WeeklyOverviewScreen> createState() => _WeeklyOverviewScreenState();
@@ -46,7 +48,7 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
     int unspecifiedIntent = 0;
 
     // Initialize maps to 0 to ensure consistent ordering later
-    for (var category in ActivityCategory.values) {
+    for (var category in ActivityCategory.builtInCategories) {
       totals[category] = 0;
     }
     for (var level in EnergyLevel.values) {
@@ -70,8 +72,8 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
       final dayStart = DateTime(date.year, date.month, date.day);
       final dayEnd = dayStart.add(const Duration(days: 1));
 
-      final entries = await _storage.loadEntries(date);
-      final prevEntries = await _storage.loadEntries(date.subtract(const Duration(days: 1)));
+      final entries = await _storage.loadEntries(date, widget.customCategories);
+      final prevEntries = await _storage.loadEntries(date.subtract(const Duration(days: 1)), widget.customCategories);
 
       // Sum duration per category, energy, and intent using only the portion
       // of each entry that falls within the given day. We include entries stored
@@ -174,7 +176,8 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              // Responsive horizontal padding for readability across screen sizes
+              padding: EdgeInsets.symmetric(horizontal: MediaQuery.of(context).size.width > 600 ? 40 : 20, vertical: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

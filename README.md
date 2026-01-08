@@ -9,6 +9,7 @@ I wanted a quiet, pressure-free way to notice patterns in my days. The goal is c
 What’s in this version (v3)
 
 - Manual time tracking: activity name, category, start and end times
+- Custom categories: Add your own categories alongside built-in ones (Study, Work, Rest, Scroll, Other) to make time tracking more personal
 - Date navigation (Today, Yesterday, or pick a date)
 - Daily timeline and a Week view that summarizes the last 7 days
 - Optional tags per entry: Energy (Low / Neutral / High) and Intent (Intentional / Unintentional)
@@ -19,6 +20,19 @@ Energy & Intent
 
 - Energy and Intent tags are small, optional fields you can add when logging an entry.
 - They are intentionally neutral and skippable. Older entries without these tags remain compatible.
+
+Custom categories
+
+Focuslog includes built-in categories (Study, Work, Rest, Scroll, Other) but you can add your own to make time tracking more personal. Custom categories appear alongside built-in ones in entry forms and summaries. This helps reflect your unique activities without making the app more complex.
+
+How insights are generated
+
+Insights on the Today page are simple, rule-based observations derived from your entries. They appear only when there's sufficient data (at least 3 entries and 60+ minutes total).
+
+- **Dominant category energy pattern**: Finds your most-used category for the day (excluding Scroll) and checks if 60% or more of time in that category was logged when energy was "High", showing "Most time in [category] was recorded when energy was high."
+- **Unintentional timing pattern**: If 50% or more of unintentional time occurred in a single time-of-day period (morning/afternoon/evening/night), shows which period.
+
+Thresholds are conservative to highlight clear patterns. Insights are optional to view and prioritize observation over judgment.
 
 Data & storage
 

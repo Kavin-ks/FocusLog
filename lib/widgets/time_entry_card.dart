@@ -72,18 +72,6 @@ class TimeEntryCard extends StatelessWidget {
   }
 
   Color _getCategoryColor(ActivityCategory category) {
-    // Use muted, neutral tones so colors do not imply success or failure.
-    switch (category) {
-      case ActivityCategory.study:
-        return const Color(0xFF6C8EBF); // Muted blue
-      case ActivityCategory.work:
-        return const Color(0xFF7E8A97); // Muted grey-blue
-      case ActivityCategory.rest:
-        return const Color(0xFFB5C1A9); // Muted sage
-      case ActivityCategory.scroll:
-        return const Color(0xFFBFA7C9); // Muted mauve
-      case ActivityCategory.other:
-        return const Color(0xFF9E9E9E); // Neutral grey
-    }
+    return category.color ?? const Color(0xFF607D8B);
   }
 }
