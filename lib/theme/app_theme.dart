@@ -44,7 +44,7 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: accentColor.withOpacity(0.1)),
+          side: BorderSide(color: Color(0x1A95A5A6)),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -68,11 +68,11 @@ class AppTheme {
         fillColor: surfaceColor,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: accentColor.withOpacity(0.3)),
+          borderSide: BorderSide(color: Color(0x4D95A5A6)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: accentColor.withOpacity(0.3)),
+          borderSide: BorderSide(color: Color(0x4D95A5A6)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),

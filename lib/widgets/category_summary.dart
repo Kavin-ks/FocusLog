@@ -15,8 +15,6 @@ class CategorySummary extends StatelessWidget {
 
     final list = ActivityCategory.values.map((cat) {
       final minutes = totals[cat] ?? 0;
-      final hours = minutes ~/ 60;
-      final mins = minutes % 60;
       return MapEntry(cat, minutes);
     }).toList();
 
@@ -43,7 +41,7 @@ class CategorySummary extends StatelessWidget {
                   ],
                 ),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),

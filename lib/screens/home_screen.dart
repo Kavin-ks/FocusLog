@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
-import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
+// share_plus is used by the export sheet; not required directly here
 import '../widgets/export_options_sheet.dart';
 
 import '../models/time_entry.dart';
 import '../services/storage_service.dart';
+import '../services/settings_service.dart';
 import '../widgets/day_summary.dart';
-import '../widgets/time_entry_card.dart';
+// time_entry_card is not directly used in this screen; kept commented for future
+// import '../widgets/time_entry_card.dart';
 import '../widgets/timeline_view.dart';
 import '../widgets/category_summary.dart';
 import 'add_entry_dialog.dart';
 import 'weekly_overview_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,7 +26,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final StorageService _storage = StorageService();
+  final SettingsService _settingsService = SettingsService();
   List<TimeEntry> _entries = [];
+  AppSettings? _settings;
   DateTime _selectedDate = DateTime.now();
   bool _loading = true;
   final TextEditingController _reflectionController = TextEditingController();
@@ -32,8 +36,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _loadSettings();
     _loadEntries();
     _loadReflection();
+  }
+
+  Future<void> _loadSettings() async {
+    final s = await _settingsService.loadSettings();
+    if (!mounted) return;
+    setState(() => _settings = s);
   }
 
   Future<void> _loadEntries() async {
@@ -50,26 +61,114 @@ class _HomeScreenState extends State<HomeScreen> {
     return _entries;
   }
 
+  bool _showInsights = true;
+
+  /// Generate short, rule-based, plain-language insights about the selected day.
+  ///
+  /// Rules are intentionally simple and transparent (no AI or scoring):
+  /// - If a majority of 'focused' time (study/work) occurred when energy was high,
+  ///   report that.
+  /// - If a large portion (>=50%) of unintentional time happened in one part of day,
+  ///   report which part (morning/afternoon/evening/night).
+  List<String> _generateInsights() {
+    final entries = _entriesForSelectedDate;
+    // totalMinutes is not required here; computed in callers when needed
+
+    final focusedCats = {ActivityCategory.study, ActivityCategory.work};
+    final focusedMinutes = entries
+        .where((e) => focusedCats.contains(e.category))
+        .fold<int>(0, (s, e) => s + e.durationMinutes);
+
+    // Focused + energy insight
+    // Rule: If at least 60% of focused minutes were logged when energy was "High",
+    // we show a simple, neutral statement about that. Thresholds are intentionally
+    // conservative and transparent.
+    if (focusedMinutes > 0) {
+      final focusedHigh = entries
+          .where((e) => focusedCats.contains(e.category) && e.energyLevel == EnergyLevel.high)
+          .fold<int>(0, (s, e) => s + e.durationMinutes);
+
+      final ratio = focusedHigh / focusedMinutes;
+      if (ratio >= 0.6) {
+        return ['Most focused time was recorded when energy was high.'];
+      }
+    }
+
+    // Unintentional time by time-of-day insight
+    // Rule: If 50% or more of unintentional minutes happened in a single
+    // time-of-day bucket (morning/afternoon/evening/night), we report that.
+    final unintentionalEntries = entries.where((e) => e.intent == IntentTag.unintentional).toList();
+    final unintentionalTotal = unintentionalEntries.fold<int>(0, (s, e) => s + e.durationMinutes);
+    if (unintentionalTotal > 0) {
+      int morning = 0, afternoon = 0, evening = 0, night = 0;
+      for (final e in unintentionalEntries) {
+        final hour = e.startTime.hour;
+        if (hour >= 5 && hour < 11) {
+          morning += e.durationMinutes;
+        } else if (hour >= 11 && hour < 17) {
+          afternoon += e.durationMinutes;
+        } else if (hour >= 17 && hour < 22) {
+          evening += e.durationMinutes;
+        } else {
+          night += e.durationMinutes;
+        }
+      }
+
+      final parts = {
+        'morning': morning,
+        'afternoon': afternoon,
+        'evening': evening,
+        'night': night,
+      };
+
+      final top = parts.entries.reduce((a, b) => a.value >= b.value ? a : b);
+      if (top.value / unintentionalTotal >= 0.5) {
+        return ['A large portion of unintentional time occurred in the ${top.key}.'];
+      }
+    }
+
+    // If no specific insights, return an empty list (so UI can show a gentle message)
+    return [];
+  }
+
   Future<void> _openAddDialog([TimeEntry? existing]) async {
-    final result = await showDialog<TimeEntry>(
+    final result = await showDialog<Object?>(
       context: context,
       builder: (_) => AddEntryDialog(entry: existing, selectedDate: _selectedDate),
     );
 
     if (result != null) {
-      if (existing == null) {
-        await _storage.addEntry(_selectedDate, result);
-      } else {
-        await _storage.updateEntry(_selectedDate, result);
+      if (result is TimeEntry) {
+        if (existing == null) {
+          await _storage.addEntry(_selectedDate, result);
+        } else {
+          // If editing, update the entry stored under the original date
+          await _storage.updateEntry(_selectedDate, result);
+        }
+      } else if (result is List<TimeEntry>) {
+        // Split entry case: return multiple entries to store under their respective dates
+        if (existing == null) {
+          for (final e in result) {
+            final dateKey = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
+            await _storage.addEntry(dateKey, e);
+          }
+        } else {
+          // Editing existing entry that now spans days: remove original and add new parts
+          final originalDate = DateTime(existing.startTime.year, existing.startTime.month, existing.startTime.day);
+          await _storage.deleteEntry(originalDate, existing.id);
+          for (final e in result) {
+            final dateKey = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
+            await _storage.addEntry(dateKey, e);
+          }
+        }
       }
+
       await _loadEntries();
     }
   }
 
-  Future<void> _deleteEntry(String id) async {
-    await _storage.deleteEntry(_selectedDate, id);
-    await _loadEntries();
-  }
+  // Deleted unused `_deleteEntry` helper to avoid analyzer warnings; use
+  // `StorageService.deleteEntry` directly where needed.
 
   void _changeDate(int days) {
     setState(() {
@@ -170,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export error: $e')));
       }
     }
   }
@@ -180,8 +279,8 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Clear all data'),
-          content: const Text('This will permanently remove all saved entries and reflections. If you want to keep a copy, consider exporting your data first.'),
+          title: const Text('Clear data'),
+          content: const Text('This will permanently remove all saved entries and reflections. If you would like to keep a copy, consider exporting your data first.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -201,7 +300,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await _loadEntries();
       await _loadReflection();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All data cleared')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Data cleared')));
       }
     }
   }
@@ -228,6 +327,20 @@ class _HomeScreenState extends State<HomeScreen> {
             },
             tooltip: 'Weekly Overview',
           ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () async {
+              final result = await Navigator.of(context).push<AppSettings?>(
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+              if (result != null) {
+                setState(() => _settings = result);
+                // reload entries to reflect any changed behavior (if needed)
+                await _loadEntries();
+              }
+            },
+            tooltip: 'Settings',
+          ),
           PopupMenuButton<String>(
             onSelected: (value) async {
               if (value == 'export_json') {
@@ -242,7 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const PopupMenuItem(value: 'export_json', child: Text('Export JSON')),
               const PopupMenuItem(value: 'export_csv', child: Text('Export CSV')),
               const PopupMenuDivider(),
-              const PopupMenuItem(value: 'clear_all', child: Text('Clear all data')),
+              const PopupMenuItem(value: 'clear_all', child: Text('Clear data')),
             ],
           ),
         ],
@@ -325,6 +438,49 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 12),
 
+
+                    // Optional insights (rule-based, non-AI, minimal language)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Insights (optional)', style: Theme.of(context).textTheme.bodyMedium),
+                                IconButton(
+                                  icon: Icon(_showInsights ? Icons.visibility_off : Icons.visibility, size: 20),
+                                  tooltip: _showInsights ? 'Hide insights' : 'Show insights',
+                                  onPressed: () => setState(() => _showInsights = !_showInsights),
+                                ),
+                              ],
+                            ),
+                            if (_showInsights) ...[
+                              const SizedBox(height: 6),
+                              Builder(builder: (context) {
+                                final insights = _generateInsights();
+                                if (insights.isEmpty) {
+                                  return Text('No notable insights for today.', style: Theme.of(context).textTheme.bodySmall);
+                                }
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: insights.map((s) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Text('• $s', style: Theme.of(context).textTheme.bodySmall),
+                                  )).toList(),
+                                );
+                              }),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
                     // Day summary
                     DaySummary(entries: todaysEntries, date: _selectedDate),
                     const SizedBox(height: 16),
@@ -341,13 +497,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: Text(
-                            'No entries yet. Use the + button to log a period. No judgement—just clarity.',
+                            'No entries yet. You can tap the + button to log a time period.',
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ),
                       )
                     else
-                      TimelineView(entries: todaysEntries),
+                      TimelineView(entries: todaysEntries, maxEntries: _settings?.entriesPerPage),
 
                     const SizedBox(height: 20),
 
@@ -364,7 +520,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               controller: _reflectionController,
                               maxLines: 6,
                               decoration: const InputDecoration(
-                                hintText: 'What helped me today? What drained me today?',
+                                hintText: 'What supported me today? What challenged me today?',
                               ),
                             ),
                             const SizedBox(height: 12),

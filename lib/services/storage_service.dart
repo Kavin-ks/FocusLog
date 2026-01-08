@@ -2,6 +2,30 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/time_entry.dart';
 
+/// Simple key-value-backed storage for time entries and reflections.
+///
+/// Normalization guarantees:
+/// - When entries are loaded they are normalized (cross-midnight `endTime`
+///   corrections are applied and invalid/missing optional fields are treated as
+///   `null`). If normalization changes the stored representation, the
+///   normalized JSON is persisted back to preferences so on-disk data follows
+///   a consistent structure.
+/// - When entries are saved they are normalized before being written.
+/// Storage service responsibilities and migration-safety notes:
+///
+/// - This service stores per-day `TimeEntry` lists in SharedPreferences
+///   using a date-based key. Historically entries could be written with
+///   slightly different shapes or with `endTime` earlier than `startTime`.
+/// - `loadEntries` performs defensive parsing: it attempts to parse each
+///   stored item individually, skips unrecoverable/malformed items, and
+///   writes back a normalized list. This ensures older app versions or
+///   corrupted data don't crash the UI and that storage is migrated to a
+///   consistent format on read.
+/// - `saveEntries` normalizes entries before writing so on-disk JSON is
+///   consistent (normalized times, explicit keys for optional fields).
+/// - Optional fields (`energy`, `intent`) are treated as nullable; missing
+///   or invalid values are stored/read as `null` to preserve intent and
+///   avoid misleading defaults.
 class StorageService {
   static const String _reflectionKey = 'daily_reflection';
 
@@ -17,16 +41,83 @@ class StorageService {
     if (entriesJson == null) {
       return [];
     }
+    // Defensive parsing for migration safety.
+    // Older or corrupted data may contain malformed items; we attempt to
+    // parse each entry individually, skip entries we can't reasonably
+    // recover, and persist a cleaned/normalized representation back to
+    // storage so future loads are stable.
+    List<dynamic> decoded;
+    try {
+      final raw = jsonDecode(entriesJson);
+      if (raw is List<dynamic>) {
+        decoded = raw;
+      } else {
+        // Unexpected top-level shape: replace with empty list.
+        await prefs.setString(key, jsonEncode([]));
+        return [];
+      }
+    } catch (_) {
+      // If stored string isn't valid JSON, clear the entry list for safety.
+      await prefs.setString(key, jsonEncode([]));
+      return [];
+    }
 
-    final List<dynamic> decoded = jsonDecode(entriesJson);
-    return decoded.map((json) => TimeEntry.fromJson(json)).toList();
+    final List<TimeEntry> entries = [];
+    var changed = false; // whether we need to overwrite stored JSON
+
+    for (final item in decoded) {
+      try {
+        Map<String, dynamic> map;
+        if (item is Map<String, dynamic>) {
+          map = item;
+        } else if (item is Map) {
+          // convert dynamic-keyed map into Map<String,dynamic>
+          map = item.map((k, v) => MapEntry(k.toString(), v));
+          changed = true;
+        } else {
+          // Unrecoverable type for this item; skip it.
+          changed = true;
+          continue;
+        }
+
+        // Basic required fields check
+        if (!(map.containsKey('startTime') && map.containsKey('endTime') && map.containsKey('activityName'))) {
+          // Skip entries missing required fields; mark changed so we persist a cleaned list.
+          changed = true;
+          continue;
+        }
+
+        // Parse into TimeEntry using existing normalization logic. If parsing
+        // fails (bad dates, etc.) we'll skip the entry rather than crash.
+        final entry = TimeEntry.fromJson(map);
+        entries.add(entry);
+      } catch (_) {
+        // Parsing failed for this entry: skip and continue
+        changed = true;
+        continue;
+      }
+    }
+
+    // Persist a normalized representation back to storage if necessary.
+    final normalizedJsonList = entries.map((e) => e.toJson()).toList();
+    final normalizedString = jsonEncode(normalizedJsonList);
+    if (changed || normalizedString != entriesJson) {
+      try {
+        await prefs.setString(key, normalizedString);
+      } catch (_) {
+        // ignore write failures; we still return the parsed entries
+      }
+    }
+
+    return entries;
   }
 
   Future<void> saveEntries(DateTime date, List<TimeEntry> entries) async {
     final prefs = await SharedPreferences.getInstance();
     final key = _getEntriesKeyForDate(date);
+    // Normalize entries before persisting to ensure consistent stored structure
     final List<Map<String, dynamic>> jsonList =
-        entries.map((entry) => entry.toJson()).toList();
+        entries.map((entry) => entry.normalized().toJson()).toList();
     await prefs.setString(key, jsonEncode(jsonList));
   }
 
@@ -99,13 +190,13 @@ class StorageService {
     return jsonEncode(out);
   }
 
-  /// Export all stored entries as CSV. Each row: date,id,startTime,endTime,activityName,category,durationMinutes
+  /// Export all stored entries as CSV. Each row: date,id,startTime,endTime,activityName,category,durationMinutes,energy,intent
   Future<String> exportAllAsCsv() async {
     final prefs = await SharedPreferences.getInstance();
     final keys = prefs.getKeys();
 
     final buffer = StringBuffer();
-    buffer.writeln('date,id,startTime,endTime,activityName,category,durationMinutes');
+    buffer.writeln('date,id,startTime,endTime,activityName,category,durationMinutes,energy,intent');
 
     for (final key in keys) {
       if (key.startsWith('time_entries_')) {
@@ -115,8 +206,10 @@ class StorageService {
         for (final e in decoded) {
           final entry = TimeEntry.fromJson(e);
           final dateKey = key.replaceFirst('time_entries_', '');
+          final energyName = entry.energyLevel?.name ?? '';
+          final intentName = entry.intent?.name ?? '';
           buffer.writeln(
-              '$dateKey,${entry.id},${entry.startTime.toIso8601String()},${entry.endTime.toIso8601String()},"${_escapeCsv(entry.activityName)}",${entry.category.name},${entry.durationMinutes}');
+              '$dateKey,${entry.id},${entry.startTime.toIso8601String()},${entry.endTime.toIso8601String()},"${_escapeCsv(entry.activityName)}",${entry.category.name},${entry.durationMinutes},$energyName,$intentName');
         }
       }
     }

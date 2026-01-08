@@ -27,7 +27,7 @@ class TimeEntryCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              // Category indicator
+              // Category indicator (muted, neutral colors to avoid success/failure semantics)
               Container(
                 width: 4,
                 height: 48,
@@ -49,7 +49,7 @@ class TimeEntryCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${timeFormat.format(entry.startTime)} - ${timeFormat.format(entry.endTime)} · ${entry.category.displayName}',
+                      '${timeFormat.format(entry.startTime)} - ${timeFormat.format(entry.endTime)} · ${entry.category.displayName}${entry.energyLevel != null ? ' · ${entry.energyLevel!.displayName}' : ''}${entry.intent != null ? ' · ${entry.intent!.displayName}' : ''}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
@@ -72,17 +72,18 @@ class TimeEntryCard extends StatelessWidget {
   }
 
   Color _getCategoryColor(ActivityCategory category) {
+    // Use muted, neutral tones so colors do not imply success or failure.
     switch (category) {
       case ActivityCategory.study:
-        return const Color(0xFF4CAF50); // Green
+        return const Color(0xFF6C8EBF); // Muted blue
       case ActivityCategory.work:
-        return const Color(0xFF2196F3); // Blue
+        return const Color(0xFF7E8A97); // Muted grey-blue
       case ActivityCategory.rest:
-        return const Color(0xFFFF9800); // Orange
+        return const Color(0xFFB5C1A9); // Muted sage
       case ActivityCategory.scroll:
-        return const Color(0xFF9C27B0); // Purple
+        return const Color(0xFFBFA7C9); // Muted mauve
       case ActivityCategory.other:
-        return const Color(0xFF757575); // Grey
+        return const Color(0xFF9E9E9E); // Neutral grey
     }
   }
 }

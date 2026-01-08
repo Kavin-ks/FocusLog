@@ -30,7 +30,7 @@ class ExportOptionsSheet extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: () async {
                 await Share.shareXFiles([XFile(file.path)], text: 'FocusLog export');
-                Navigator.of(context).pop();
+                if (context.mounted) Navigator.of(context).pop();
               },
               icon: const Icon(Icons.share),
               label: const Text('Share file'),
@@ -39,9 +39,12 @@ class ExportOptionsSheet extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: content));
-                Navigator.of(context).pop();
-                if (ScaffoldMessenger.maybeOf(context) != null) {
-                  ScaffoldMessenger.of(context)!.showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
+                if (context.mounted) Navigator.of(context).pop();
+                if (context.mounted) {
+                  final messenger = ScaffoldMessenger.maybeOf(context);
+                  if (messenger != null) {
+                    messenger.showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
+                  }
                 }
               },
               icon: const Icon(Icons.copy),

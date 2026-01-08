@@ -4,17 +4,18 @@ import '../models/time_entry.dart';
 
 class TimelineView extends StatelessWidget {
   final List<TimeEntry> entries;
+  final int? maxEntries; // optional limit for pagination / page size
 
-  const TimelineView({super.key, required this.entries});
+  const TimelineView({super.key, required this.entries, this.maxEntries});
 
   @override
   Widget build(BuildContext context) {
     final sorted = List.of(entries)..sort((a, b) => a.startTime.compareTo(b.startTime));
+    final display = (maxEntries != null) ? sorted.take(maxEntries!).toList() : sorted;
 
     return Column(
-      children: sorted.map((entry) {
-        final topRadius = Radius.circular(6);
-        final bottomRadius = Radius.circular(6);
+      children: display.map((entry) {
+        // top/bottom radius variables removed (unused)
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

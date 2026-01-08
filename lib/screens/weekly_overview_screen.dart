@@ -14,6 +14,14 @@ class WeeklyOverviewScreen extends StatefulWidget {
 class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
   final StorageService _storage = StorageService();
   Map<ActivityCategory, int> _categoryTotals = {};
+  // Energy totals for the 7-day window (per EnergyLevel)
+  Map<EnergyLevel, int> _energyTotals = {};
+  int _unspecifiedEnergy = 0; // minutes without an energy tag
+
+  // Intent totals (intentional / unintentional)
+  Map<IntentTag, int> _intentTotals = {};
+  int _unspecifiedIntent = 0; // minutes without an intent tag
+
   bool _loading = true;
   DateTime _weekEndDate = DateTime.now();
 
@@ -32,25 +40,74 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
     setState(() => _loading = true);
 
     final Map<ActivityCategory, int> totals = {};
-    
-    // Initialize all categories to 0 to ensure consistent ordering later
+    final Map<EnergyLevel, int> energyTotals = {};
+    final Map<IntentTag, int> intentTotals = {};
+    int unspecifiedEnergy = 0;
+    int unspecifiedIntent = 0;
+
+    // Initialize maps to 0 to ensure consistent ordering later
     for (var category in ActivityCategory.values) {
       totals[category] = 0;
+    }
+    for (var level in EnergyLevel.values) {
+      energyTotals[level] = 0;
+    }
+    for (var i in IntentTag.values) {
+      intentTotals[i] = 0;
+    }
+
+    // Helper to compute overlap minutes between an entry and a day window
+    int overlapMinutes(DateTime start, DateTime end, DateTime dayStart, DateTime dayEnd) {
+      final overlapStart = start.isAfter(dayStart) ? start : dayStart;
+      final overlapEnd = end.isBefore(dayEnd) ? end : dayEnd;
+      final diff = overlapEnd.difference(overlapStart).inMinutes;
+      return diff > 0 ? diff : 0;
     }
 
     // Load entries for the last 7 days (inclusive of the end date)
     for (int i = 0; i < 7; i++) {
       final date = _weekEndDate.subtract(Duration(days: i));
-      final entries = await _storage.loadEntries(date);
+      final dayStart = DateTime(date.year, date.month, date.day);
+      final dayEnd = dayStart.add(const Duration(days: 1));
 
-      // Sum duration per category
-      for (var entry in entries) {
-        totals[entry.category] = (totals[entry.category] ?? 0) + entry.durationMinutes;
+      final entries = await _storage.loadEntries(date);
+      final prevEntries = await _storage.loadEntries(date.subtract(const Duration(days: 1)));
+
+      // Sum duration per category, energy, and intent using only the portion
+      // of each entry that falls within the given day. We include entries stored
+      // under the *previous* date as well, since older versions or manual
+      // entries may store cross-midnight activities under the start date. This
+      // ensures accurate per-day and per-week totals even when entries cross midnight.
+      // Note: when loading entries we also normalize storage — if an entry's
+      // `endTime` was earlier than its `startTime` we treat it as crossing
+      // midnight and interpret the end time as the following day. This keeps
+      // the per-day and per-week aggregates stable and predictable.
+      for (var entry in [...entries, ...prevEntries]) {
+        final minutes = overlapMinutes(entry.startTime, entry.endTime, dayStart, dayEnd);
+        if (minutes <= 0) continue;
+
+        totals[entry.category] = (totals[entry.category] ?? 0) + minutes;
+
+        if (entry.energyLevel != null) {
+          energyTotals[entry.energyLevel!] = (energyTotals[entry.energyLevel!] ?? 0) + minutes;
+        } else {
+          unspecifiedEnergy += minutes;
+        }
+
+        if (entry.intent != null) {
+          intentTotals[entry.intent as IntentTag] = (intentTotals[entry.intent as IntentTag] ?? 0) + minutes;
+        } else {
+          unspecifiedIntent += minutes;
+        }
       }
     }
 
     setState(() {
       _categoryTotals = totals;
+      _energyTotals = energyTotals;
+      _unspecifiedEnergy = unspecifiedEnergy;
+      _intentTotals = intentTotals;
+      _unspecifiedIntent = unspecifiedIntent;
       _loading = false;
     });
   }
@@ -280,7 +337,221 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
                           ),
                         ),
                       );
-                    }).toList(),
+                    }),
+
+                  const SizedBox(height: 8),
+
+                  // Energy level breakdown
+                  Text(
+                    'Time by Energy level',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Builder(builder: (context) {
+                    final total = _totalMinutes;
+                    // Build a list of energy rows (level + minutes)
+                    final energyList = _energyTotals.entries.toList()
+                      ..sort((a, b) => b.value.compareTo(a.value));
+
+                    if (total == 0) {
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text('No entries for this week.', style: Theme.of(context).textTheme.bodyMedium),
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        ...energyList.map((entry) {
+                          final minutes = entry.value;
+                          final percent = total > 0 ? (minutes / total * 100) : 0.0;
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(entry.key.displayName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                                        Text(_formatDuration(minutes), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(4),
+                                            child: LinearProgressIndicator(value: percent / 100, minHeight: 12, backgroundColor: Colors.grey[200]),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        SizedBox(width: 50, child: Text('${percent.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500),)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text('${_formatHours(minutes)} hours', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+
+                        if (_unspecifiedEnergy > 0) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text('Unspecified', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                                    Text(_formatDuration(_unspecifiedEnergy), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  }),
+
+                  const SizedBox(height: 16),
+
+                  // Intentional vs Unintentional breakdown
+                  Text(
+                    'Intentional vs Unintentional',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Builder(builder: (context) {
+                    final total = _totalMinutes;
+                    final intentional = _intentTotals[IntentTag.intentional] ?? 0;
+                    final unintentional = _intentTotals[IntentTag.unintentional] ?? 0;
+
+                    if (total == 0) {
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text('No entries for this week.', style: Theme.of(context).textTheme.bodyMedium),
+                        ),
+                      );
+                    }
+
+                    final intentionalPct = total > 0 ? (intentional / total * 100) : 0.0;
+                    final unintentionalPct = total > 0 ? (unintentional / total * 100) : 0.0;
+                    final unspecified = _unspecifiedIntent;
+                    final unspecifiedPct = total > 0 ? (unspecified / total * 100) : 0.0;
+
+                    return Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text('Intentional', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                                      Text(_formatDuration(intentional), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: intentionalPct / 100, minHeight: 12, backgroundColor: Colors.grey[200]))),
+                                      const SizedBox(width: 12),
+                                      SizedBox(width: 50, child: Text('${intentionalPct.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500))),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text('${_formatHours(intentional)} hours', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text('Unintentional', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                                      Text(_formatDuration(unintentional), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: unintentionalPct / 100, minHeight: 12, backgroundColor: Colors.grey[200]))),
+                                      const SizedBox(width: 12),
+                                      SizedBox(width: 50, child: Text('${unintentionalPct.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500))),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text('${_formatHours(unintentional)} hours', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        if (unspecified > 0) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text('Unspecified', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                                        Text(_formatDuration(unspecified), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: unspecifiedPct / 100, minHeight: 12, backgroundColor: Colors.grey[200]))),
+                                        const SizedBox(width: 12),
+                                        SizedBox(width: 50, child: Text('${unspecifiedPct.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500))),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text('${_formatHours(unspecified)} hours', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  }),
 
                   const SizedBox(height: 20),
                 ],

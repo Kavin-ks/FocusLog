@@ -1,43 +1,61 @@
-Focuslog
+# Focuslog
 
-Focuslog is a calm, minimal web app I’m building to understand how my time actually goes each day.
-It’s intentionally simple and judgment-free — no scores, no streaks, no pressure — just clarity.
+A small, calm tool for keeping a simple record of how you spend your time each day. It runs locally and is private — no accounts, no scores, no streaks.
 
-The goal is not to “optimize productivity”, but to notice patterns and reflect honestly.
+Why I built this
 
-Current state
+I wanted a quiet, pressure-free way to notice patterns in my days. The goal is clarity: to help reflection without nudges or scoring.
 
-This repository represents the current stable version of Focuslog.
-I’m building it iteratively and expanding it step by step.
+What’s in this version (v3)
 
-Right now, Focuslog focuses on:
+- Manual time tracking: activity name, category, start and end times
+- Date navigation (Today, Yesterday, or pick a date)
+- Daily timeline and a Week view that summarizes the last 7 days
+- Optional tags per entry: Energy (Low / Neutral / High) and Intent (Intentional / Unintentional)
+- Simple, rule-based insights on the Today page (optional to view)
+- Export data (JSON/CSV) and a calm confirmation before removing saved data
 
-manual time tracking
+Energy & Intent
 
-clear daily and weekly views
+- Energy and Intent tags are small, optional fields you can add when logging an entry.
+- They are intentionally neutral and skippable. Older entries without these tags remain compatible.
 
-simple reflections
+Data & storage
 
-Everything runs locally and stays private.
+Data is stored locally and grouped by date (e.g., `time_entries_YYYY_M_D`, `daily_reflection_YYYY_M_D`).
+Exports include the optional tags when present.
 
-What Focuslog can do (current version)
-Daily time tracking
+Design principles
 
-Log activities manually with:
+- Calm, neutral language
+- Minimal UI
+- No productivity scoring or gamification
 
-activity name
+Run locally
 
-category (study, work, rest, scroll, other)
+Requirements: Flutter SDK (https://docs.flutter.dev/get-started/install)
 
-start and end time
+From the project root:
 
-View the day as a chronological timeline of time blocks.
+```bash
+flutter pub get
+flutter run
+```
 
-Multi-day navigation
+Development notes
 
-Switch between Today, Yesterday, or any past date.
+- Components are small and modular.
+- Logic is commented where rules are non-obvious (weekly aggregation, exports, insight rules).
 
-Each day’s data is stored separately so patterns don’t get mixed up.
+Validation & overlaps
+
+- If the end time is earlier than the start time, the app asks whether the activity crossed midnight; if confirmed, the activity is split into two entries (before and after midnight) so daily and weekly summaries reflect actual minutes per day. Weekly summaries also compute per-day overlaps (including parts of entries stored under adjacent dates) so totals remain accurate.
+- Zero-length entries (end time equal to start time) are not allowed and the app asks you to correct them.
+- If a new or edited entry overlaps existing entries for the same date, the app warns you and shows the conflicting entries; you may then choose to save anyway or review times. Overlaps are allowed but surfaced clearly so you can resolve them.
+
+License
+
+MIT
 
 Weekly overview
 
@@ -63,7 +81,7 @@ Data control
 
 Export all data as JSON or CSV.
 
-Clear all data only after a clear confirmation step.
+Clear data only after a calm confirmation step.
 
 Everything is stored locally on the device.
 
@@ -82,6 +100,10 @@ No notifications or reminders
 Clarity over aesthetics
 
 If something feels stressful or noisy, it doesn’t belong here.
+
+Language philosophy
+
+All text in the app uses optional, neutral language to avoid judgment or pressure. Instead of directives like "Fix this" or evaluative terms like "unproductive," the app suggests possibilities (e.g., "You may want to review") and states facts (e.g., "Time recorded"). This creates a calm, reflective space focused on observation rather than evaluation.
 
 How data is stored
 
@@ -128,7 +150,23 @@ Development notes
 
 UI components are kept small and modular.
 
-Logic is commented where it’s not obvious (weekly aggregation, exports, date helpers).
+Logic is commented where it’s not obvious (weekly aggregation, exports, date helpers, and insight rules).
+
+Version 3 — Energy & Intent (stable)
+
+Version 3 adds two optional, neutral tags to entries:
+
+- Energy: one of Low energy, Neutral, or High energy. This field is optional and skippable.
+- Intent: one of Intentional or Unintentional. This field is optional and skippable.
+
+These tags are intentionally minimal and non-judgmental. They are stored per entry and included in exports (JSON/CSV). Older data (from earlier versions) remains compatible because both fields are nullable and safely ignored when absent.
+
+Simple, rule-based insights (non-AI) were added to the Today view. Examples:
+
+- “Most of your focused time happened when energy was high.”
+- “A large portion of unintentional time happened in the evening.”
+
+Insights are produced by explicit, transparent rules (no scoring or AI) and are optional to view.
 
 Features are added slowly to avoid complexity creep.
 
@@ -150,4 +188,27 @@ Exactly what Hack Club likes to see
 
 Next time you commit, use a message like:
 
-rewrite README in personal voice and clarify project intent
+rewrite README in personal voice and clarify project intent.
+
+## Data handling notes
+
+- Cross-midnight entries: If an entry's `endTime` is earlier than its `startTime`
+	the app treats it as crossing midnight when the user confirms. The entry is
+	split into two normalized `TimeEntry` objects (one ending at midnight and one
+	starting at midnight) so per-day and per-week aggregates report minutes on the
+	correct calendar day.
+- Normalization on load/save: When reading stored entries the app defensively
+	parses each item, skips unrecoverable/malformed entries, and persists a
+	normalized representation back to storage. `saveEntries` also writes a
+	normalized JSON representation. This makes migrations from earlier versions
+	safe and keeps on-disk data consistent.
+- Optional fields: `energy` and `intent` are nullable. Missing or invalid
+	values are treated as `null` rather than being coerced to defaults. This
+	preserves historical data and avoids introducing misleading tags.
+- Migration safety: malformed entries or unexpected shapes in stored JSON are
+	skipped during load to prevent crashes; the cleaned list is written back so
+	future loads are stable. Exports include the normalized fields for clarity.
+
+These decisions prioritize robustness and clear per-day accounting over
+heuristic repairs or opaque defaults.
+

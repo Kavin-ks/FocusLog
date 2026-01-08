@@ -93,11 +93,7 @@ class DaySummary extends StatelessWidget {
                             Container(
                               height: 4,
                               decoration: BoxDecoration(
-                                color: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium!
-                                    .color!
-                                    .withOpacity(0.2),
+                                color: Theme.of(context).textTheme.bodyMedium?.color?.withAlpha(51) ?? Colors.grey.withAlpha(51),
                                 borderRadius: BorderRadius.circular(2),
                               ),
                               child: FractionallySizedBox(
@@ -105,10 +101,7 @@ class DaySummary extends StatelessWidget {
                                 widthFactor: percentage / 100,
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium!
-                                        .color,
+                                    color: Theme.of(context).textTheme.bodyMedium?.color ?? Colors.grey,
                                     borderRadius: BorderRadius.circular(2),
                                   ),
                                 ),
@@ -119,15 +112,13 @@ class DaySummary extends StatelessWidget {
                       ),
                       const SizedBox(width: 16),
                       Text(
-                        activityHours > 0
-                            ? '$activityHours h $activityMins min'
-                            : '$activityMins min',
+                        activityHours > 0 ? '$activityHours h $activityMins min' : '$activityMins min',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
                   ),
                 );
-              }).toList(),
+              }),
             ],
           ],
         ),
