@@ -38,9 +38,20 @@ app.use(limiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/entries', entriesRoutes);
 
-app.get('/api/me', (req, res) => {
-  if (!req.session || !req.session.userId) return res.status(401).json({ error: 'unauthenticated' });
-  res.json({ user: { id: req.session.userId } });
+app.get('/api/me', async (req, res) => {
+  if (!req.session || !req.session.userId) return res.status(401).json({ error: 'Please log in to continue.' });
+  const client = await pool.connect();
+  try {
+    const result = await client.query('SELECT id, name, email FROM users WHERE id = $1', [req.session.userId]);
+    if (result.rowCount === 0) return res.status(401).json({ error: 'Please log in to continue.' });
+    res.json({ user: result.rows[0] });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error(e);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
+  } finally {
+    client.release();
+  }
 });
 
 const port = process.env.PORT || 8080;
