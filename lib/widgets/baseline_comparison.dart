@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/time_entry.dart';
 import '../services/storage_service.dart';
+import '../services/auth_service.dart';
 
 class BaselineComparison extends StatelessWidget {
   final List<TimeEntry> todayEntries;
@@ -131,10 +133,34 @@ class BaselineComparison extends StatelessWidget {
     return items;
   }
 
+  Future<List<TimeEntry>> _loadLastWeekEntries(BuildContext context) async {
+    StorageService storage;
+    try {
+      storage = Provider.of<StorageService>(context, listen: false);
+    } catch (_) {
+      // No provider in tests or simple use-cases: fall back to a plain StorageService
+      storage = StorageService(AuthService());
+    }
+
+    final endDate = DateTime(date.year, date.month, date.day);
+    final startDate = endDate.subtract(const Duration(days: 7));
+
+    final entries = await (storage as dynamic).loadEntriesForDateRange(startDate, endDate);
+
+    // Exclude today from the baseline calculation
+    return entries
+        .where((e) {
+          final eDate = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
+          final today = DateTime(date.year, date.month, date.day);
+          return !eDate.isAtSameMomentAs(today);
+        })
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<TimeEntry>>(
-      future: _loadLastWeekEntries(),
+      future: _loadLastWeekEntries(context),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Card(
@@ -315,19 +341,4 @@ class BaselineComparison extends StatelessWidget {
     );
   }
 
-  Future<List<TimeEntry>> _loadLastWeekEntries() async {
-    final storage = StorageService();
-    final endDate = DateTime(date.year, date.month, date.day);
-    final startDate = endDate.subtract(const Duration(days: 7));
-
-    final entries = await storage.loadEntriesForDateRange(startDate, endDate);
-    // Exclude today from the baseline calculation
-    return entries
-        .where((e) {
-          final eDate = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
-          final today = DateTime(date.year, date.month, date.day);
-          return !eDate.isAtSameMomentAs(today);
-        })
-        .toList();
-  }
 }

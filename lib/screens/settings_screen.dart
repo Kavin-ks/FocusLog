@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
 import '../models/time_entry.dart';
 import '../services/storage_service.dart';
+import 'package:provider/provider.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -68,8 +69,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _deleteCategory(ActivityCategory cat) async {
-    final storage = StorageService();
-    final isUsed = await storage.isCategoryUsed(cat.id);
+    final storage = Provider.of<StorageService>(context, listen: false);
+    final isUsed = await (storage as dynamic).isCategoryUsed(cat.id);
     if (!mounted) return;
     if (!isUsed) {
       // Category is not used by any entries, safe to delete directly
@@ -121,7 +122,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (!mounted) return;
       if (selected != null) {
-        await storage.reassignCategory(cat.id, selected.id);
+        await (storage as dynamic).reassignCategory(cat.id, selected.id);
         setState(() {
           _settings = AppSettings(
             entriesPerPage: _settings.entriesPerPage,

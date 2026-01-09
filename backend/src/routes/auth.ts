@@ -70,6 +70,8 @@ router.delete('/account', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('DELETE FROM reflections WHERE user_id = $1', [userId]);
+    await client.query('DELETE FROM categories WHERE user_id = $1', [userId]);
     await client.query('DELETE FROM entries WHERE user_id = $1', [userId]);
     await client.query('DELETE FROM users WHERE id = $1', [userId]);
     await client.query('COMMIT');

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../models/time_entry.dart';
 import '../services/storage_service.dart';
+import 'package:provider/provider.dart';
 
 class WeeklyOverviewScreen extends StatefulWidget {
   final List<ActivityCategory> customCategories;
@@ -14,7 +15,6 @@ class WeeklyOverviewScreen extends StatefulWidget {
 }
 
 class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
-  final StorageService _storage = StorageService();
   Map<ActivityCategory, int> _categoryTotals = {};
   // Energy totals for the 7-day window (per EnergyLevel)
   Map<EnergyLevel, int> _energyTotals = {};
@@ -34,7 +34,7 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
   @override
   void initState() {
     super.initState();
-    _loadWeeklyData();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadWeeklyData());
   }
 
   /// Loads entries for the 7-day window ending on `_weekEndDate` and aggregates
@@ -65,6 +65,8 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
 
   /// Helper method to load data for a specific week ending on the given date
   Future<Map<String, dynamic>> _loadWeekData(DateTime weekEndDate) async {
+    final storage = Provider.of<StorageService>(context, listen: false);
+
     final Map<ActivityCategory, int> totals = {};
     final Map<EnergyLevel, int> energyTotals = {};
     final Map<IntentTag, int> intentTotals = {};
@@ -96,8 +98,8 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
       final dayStart = DateTime(date.year, date.month, date.day);
       final dayEnd = dayStart.add(const Duration(days: 1));
 
-      final entries = await _storage.loadEntries(date, widget.customCategories);
-      final prevEntries = await _storage.loadEntries(date.subtract(const Duration(days: 1)), widget.customCategories);
+      final entries = await storage.loadEntries(date, widget.customCategories);
+      final prevEntries = await storage.loadEntries(date.subtract(const Duration(days: 1)), widget.customCategories);
 
       // Sum duration per category, energy, and intent using only the portion
       // of each entry that falls within the given day. We include entries stored

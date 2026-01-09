@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../models/time_entry.dart';
 import '../services/storage_service.dart';
@@ -248,6 +249,7 @@ class _AddEntryDialogState extends State<AddEntryDialog> {
   }
 
   Future<void> _saveEntry() async {
+    final storage = Provider.of<StorageService>(context, listen: false);
     if (_formKey.currentState!.validate()) {
       final startDateTime = DateTime(
         _selectedDate.year,
@@ -326,14 +328,14 @@ class _AddEntryDialogState extends State<AddEntryDialog> {
         );
 
         // Check overlaps separately for both days.
-        final existingFirst = await StorageService().loadEntries(_selectedDate);
+        final existingFirst = await storage.loadEntries(_selectedDate);
         final overlappingFirst = existingFirst.where((e) {
           if (widget.entry != null && e.id == widget.entry!.id) return false;
           return firstPart.startTime.isBefore(e.endTime) && firstPart.endTime.isAfter(e.startTime);
         }).toList();
 
         final nextDate = _selectedDate.add(const Duration(days: 1));
-        final existingSecond = await StorageService().loadEntries(nextDate);
+        final existingSecond = await storage.loadEntries(nextDate);
         final overlappingSecond = existingSecond.where((e) {
           return secondPart.startTime.isBefore(e.endTime) && secondPart.endTime.isAfter(e.startTime);
         }).toList();
@@ -386,7 +388,7 @@ class _AddEntryDialogState extends State<AddEntryDialog> {
       } // end crossing-midnight handling
 
       // Check overlaps for a single-day entry
-      final existing = await StorageService().loadEntries(_selectedDate);
+      final existing = await storage.loadEntries(_selectedDate);
       final overlapping = existing.where((e) {
         if (widget.entry != null && e.id == widget.entry!.id) return false;
         return startDateTime.isBefore(e.endTime) && endDateTime.isAfter(e.startTime);

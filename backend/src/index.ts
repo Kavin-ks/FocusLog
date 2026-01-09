@@ -8,6 +8,8 @@ import dotenv from 'dotenv';
 import { pool } from './db.js';
 import authRoutes from './routes/auth.js';
 import entriesRoutes from './routes/entries.js';
+import categoriesRoutes from './routes/categories.js';
+import reflectionsRoutes from './routes/reflections.js';
 
 dotenv.config();
 
@@ -37,6 +39,8 @@ app.use(limiter);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/entries', entriesRoutes);
+app.use('/api/categories', categoriesRoutes);
+app.use('/api/reflections', reflectionsRoutes);
 
 app.get('/api/me', async (req, res) => {
   if (!req.session || !req.session.userId) return res.status(401).json({ error: 'Please log in to continue.' });

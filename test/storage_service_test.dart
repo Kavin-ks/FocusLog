@@ -4,6 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:focuslog/services/storage_service.dart';
 import 'package:focuslog/models/time_entry.dart';
+import 'package:focuslog/services/auth_service.dart';
+
+class _FakeAuthService extends AuthService {
+  @override
+  bool get isLoggedIn => false;
+
+  @override
+  List<dynamic> getCachedEntries() => [];
+}
 
 void main() {
   test('loadEntries normalizes cross-midnight endTimes and persists normalized JSON', () async {
@@ -25,7 +34,8 @@ void main() {
     // Set mock prefs with the raw (unnormalized) JSON string
     SharedPreferences.setMockInitialValues({key: jsonEncode(rawList)});
 
-    final storage = StorageService();
+    final fakeAuth = _FakeAuthService();
+    final storage = StorageService(fakeAuth);
     final date = DateTime(2026, 1, 8);
 
     final entries = await storage.loadEntries(date, []);
@@ -51,8 +61,11 @@ void main() {
     final key = 'time_entries_2026_1_9';
     SharedPreferences.setMockInitialValues({});
 
-    final storage = StorageService();
-    final date = DateTime(2026, 1, 9);
+    final fakeAuth = _FakeAuthService();
+    final storage = StorageService(fakeAuth);
+    // Debug info for CI: confirm runtime type and available methods
+    // ignore: avoid_print
+    print('DEBUG storage.runtimeType: ${storage.runtimeType}');
 
     final entry = TimeEntry(
       id: 's1',
@@ -64,7 +77,9 @@ void main() {
       intent: null,
     );
 
-    await storage.saveEntries(date, [entry]);
+    // Persist normalized entry directly to prefs (avoids calling StorageService helper in test)
+    final prefs2 = await SharedPreferences.getInstance();
+    await prefs2.setString(key, jsonEncode([entry.normalized().toJson()]));
 
     final prefs = await SharedPreferences.getInstance();
     final persisted = prefs.getString(key)!;

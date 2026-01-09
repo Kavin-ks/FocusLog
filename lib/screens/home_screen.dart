@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -28,7 +30,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final StorageService _storage = StorageService();
+  late StorageService _storage;
   final SettingsService _settingsService = SettingsService();
   List<TimeEntry> _entries = [];
   AppSettings? _settings;
@@ -39,6 +41,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Get services from provider
+    final auth = Provider.of<AuthService>(context, listen: false);
+    _storage = Provider.of<StorageService>(context, listen: false);
+    // Redirect to login if not authenticated
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!auth.isLoggedIn) {
+        Navigator.of(context).pushReplacementNamed('/');
+        return;
+      }
+    });
+
     _loadSettings();
     _loadEntries();
     _loadReflection();
@@ -144,25 +157,25 @@ class _HomeScreenState extends State<HomeScreen> {
     if (result != null) {
       if (result is TimeEntry) {
         if (existing == null) {
-          await _storage.addEntry(_selectedDate, result);
+          await (_storage as dynamic).addEntry(_selectedDate, result);
         } else {
           // If editing, update the entry stored under the original date
-          await _storage.updateEntry(_selectedDate, result);
+          await (_storage as dynamic).updateEntry(_selectedDate, result);
         }
       } else if (result is List<TimeEntry>) {
         // Split entry case: return multiple entries to store under their respective dates
         if (existing == null) {
           for (final e in result) {
             final dateKey = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
-            await _storage.addEntry(dateKey, e);
+            await (_storage as dynamic).addEntry(dateKey, e);
           }
         } else {
           // Editing existing entry that now spans days: remove original and add new parts
           final originalDate = DateTime(existing.startTime.year, existing.startTime.month, existing.startTime.day);
-          await _storage.deleteEntry(originalDate, existing.id);
+          await (_storage as dynamic).deleteEntry(originalDate, existing.id);
           for (final e in result) {
             final dateKey = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
-            await _storage.addEntry(dateKey, e);
+            await (_storage as dynamic).addEntry(dateKey, e);
           }
         }
       }
@@ -215,14 +228,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadReflection() async {
-    final r = await _storage.loadReflection(_selectedDate);
+    final r = await (_storage as dynamic).loadReflection(_selectedDate);
     setState(() {
       _reflectionController.text = r ?? '';
     });
   }
 
   Future<void> _saveReflection() async {
-    await _storage.saveReflection(_selectedDate, _reflectionController.text);
+    await (_storage as dynamic).saveReflection(_selectedDate, _reflectionController.text);
   }
 
   // Helper: are we showing today's date? Used to disable the "next" arrow and
@@ -245,14 +258,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _exportData(String format) async {
     // Calm and minimal export flow: create file, then present share dialog or copy option.
-    String content;
-    String filename;
+    String content = '';
+    String filename = '';
     if (format == 'json') {
-      content = await _storage.exportAllAsJson();
+      content = await (_storage as dynamic).exportAllAsJson();
       filename = 'focuslog_export_${DateTime.now().toIso8601String()}.json';
     } else {
-      content = await _storage.exportAllAsCsv();
-      filename = 'focuslog_export_${DateTime.now().toIso8601String()}.csv';
+      content = await (_storage as dynamic).exportAllAsCsv();
     }
 
     // Save to temporary file and show the modular export sheet
@@ -300,7 +312,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (proceed == true) {
-      await _storage.clearAllData();
+      await (_storage as dynamic).clearAllData();
       await _loadEntries();
       await _loadReflection();
       if (mounted) {
@@ -337,6 +349,7 @@ class _HomeScreenState extends State<HomeScreen> {
               final result = await Navigator.of(context).push<AppSettings?>(
                 MaterialPageRoute(builder: (context) => const SettingsScreen()),
               );
+              if (!mounted) return;
               if (result != null) {
                 setState(() => _settings = result);
                 // reload entries to reflect any changed behavior (if needed)
@@ -352,7 +365,13 @@ class _HomeScreenState extends State<HomeScreen> {
               } else if (value == 'export_csv') {
                 await _exportData('csv');
               } else if (value == 'clear_all') {
-                _confirmClearAll();
+                await _confirmClearAll();
+              } else if (value == 'logout') {
+                final auth = Provider.of<AuthService>(context, listen: false);
+                final navigator = Navigator.of(context);
+                await auth.logout();
+                if (!mounted) return;
+                navigator.pushReplacementNamed('/');
               }
             },
             itemBuilder: (context) => [
@@ -360,6 +379,8 @@ class _HomeScreenState extends State<HomeScreen> {
               const PopupMenuItem(value: 'export_csv', child: Text('Export CSV')),
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'clear_all', child: Text('Clear data')),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'logout', child: Text('Logout')),
             ],
           ),
         ],
@@ -446,6 +467,53 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 12),
 
+                    // Daily Focus Goal card
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Daily Focus Goal', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                // percentage text - calculated from today's totals and a 4h default goal
+                                Builder(builder: (context) {
+                                  final totalMinutes = todaysEntries.fold<int>(0, (s, e) => s + e.durationMinutes);
+                                  const goalMinutes = 4 * 60;
+                                  final pct = (totalMinutes / goalMinutes * 100).clamp(0, 100).round();
+                                  return Text('$pct% Done', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary));
+                                }),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            // Progress bar
+                            Builder(builder: (context) {
+                              final totalMinutes = todaysEntries.fold<int>(0, (s, e) => s + e.durationMinutes);
+                              const goalMinutes = 4 * 60;
+                              final progress = (totalMinutes / goalMinutes).clamp(0.0, 1.0);
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  LinearProgressIndicator(value: progress, minHeight: 8),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('${(totalMinutes ~/ 60)}h ${totalMinutes % 60}m logged today', style: Theme.of(context).textTheme.bodySmall),
+                                      const Text('Goal: 4h', style: TextStyle(fontWeight: FontWeight.w500)),
+                                    ],
+                                  ),
+                                ],
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
 
                     // Optional insights (rule-based, non-AI, minimal language)
                     CardSurface(
@@ -455,7 +523,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Insights (optional)', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                              Text('Insights', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                               IconButton(
                                 icon: Icon(_showInsights ? Icons.visibility_off : Icons.visibility, size: 20),
                                 tooltip: _showInsights ? 'Hide insights' : 'Show insights',
@@ -468,7 +536,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             Builder(builder: (context) {
                               final insights = _generateInsights();
                               if (insights.isEmpty) {
-                                return Text('No notable insights for today.', style: Theme.of(context).textTheme.bodySmall);
+                                return Text('No notable insights for today yet. Keep studying!', style: Theme.of(context).textTheme.bodySmall);
                               }
 
                               return Column(
@@ -485,6 +553,60 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
 
                     const SizedBox(height: 12),
+
+                    // Recent sessions (show up to 3 most recent)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('RECENT SESSIONS', style: Theme.of(context).textTheme.bodyMedium?.copyWith(letterSpacing: 1.0, fontWeight: FontWeight.w600)),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(context).push(MaterialPageRoute(builder: (context) => WeeklyOverviewScreen(customCategories: _settings?.customCategories ?? [])));
+                          },
+                          child: const Text('See all'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (todaysEntries.isEmpty)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text('No recent sessions yet.', style: Theme.of(context).textTheme.bodyMedium),
+                        ),
+                      )
+                    else
+                      Column(
+                        children: List.generate(
+                          todaysEntries.length > 3 ? 3 : todaysEntries.length,
+                          (i) {
+                            final entry = List.of(todaysEntries)..sort((a,b)=>b.startTime.compareTo(a.startTime));
+                            final e = entry[i];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Card(
+                                child: ListTile(
+                                  leading: Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).dividerColor,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(Icons.play_arrow, color: Colors.white),
+                                  ),
+                                  title: Text(e.activityName, style: Theme.of(context).textTheme.bodyLarge),
+                                  subtitle: Text('${e.category.displayName} • ${e.durationMinutes}m', style: Theme.of(context).textTheme.bodySmall),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: () => _openAddDialog(e),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                    const SizedBox(height: 16),
 
                     // Day summary
                     DaySummary(entries: todaysEntries, date: _selectedDate),
@@ -556,10 +678,35 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openAddDialog(),
         tooltip: 'Add entry',
         child: const Icon(Icons.add),
+      ),
+      bottomNavigationBar: BottomAppBar(
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 8.0,
+        child: SizedBox(
+          height: 56,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  IconButton(onPressed: () {}, icon: const Icon(Icons.grid_view)),
+                  IconButton(onPressed: () {}, icon: const Icon(Icons.menu_book)),
+                ],
+              ),
+              Row(
+                children: [
+                  IconButton(onPressed: () {}, icon: const Icon(Icons.bar_chart)),
+                  IconButton(onPressed: () {}, icon: const Icon(Icons.person)),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
+import 'screens/landing_page.dart';
+import 'screens/login_screen.dart';
+import 'screens/signup_screen.dart';
+import 'services/auth_service.dart';
+import 'services/storage_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -12,10 +18,30 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'FocusLog',
-      theme: AppTheme.theme,
-      home: const HomeScreen(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (context) {
+            final a = AuthService();
+            a.loadFromPrefs();
+            return a;
+          },
+        ),
+        ProxyProvider<AuthService, StorageService>(
+          update: (context, auth, previous) => StorageService(auth),
+        ),
+      ],
+      child: MaterialApp(
+        title: 'FocusLog',
+        theme: AppTheme.theme,
+        initialRoute: '/',
+        routes: {
+          '/': (c) => const LandingPage(),
+          '/login': (c) => const LoginScreen(),
+          '/signup': (c) => const SignupScreen(),
+          '/app': (c) => const HomeScreen(),
+        },
+      ),
     );
   }
 }

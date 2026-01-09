@@ -4,7 +4,7 @@ import { pool } from '../db.js';
 const router = express.Router();
 
 function requireAuth(req: any, res: any, next: any) {
-  if (!req.session || !req.session.userId) return res.status(401).json({ error: 'unauthenticated' });
+  if (!req.session || !req.session.userId) return res.status(401).json({ error: 'Please log in to continue.' });
   next();
 }
 
@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error(e);
-    res.status(500).json({ error: 'internal' });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   } finally {
     client.release();
   }
@@ -41,7 +41,7 @@ router.post('/', async (req, res) => {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error(e);
-    res.status(500).json({ error: 'internal' });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   } finally {
     client.release();
   }
@@ -56,8 +56,8 @@ router.put('/:id', async (req, res) => {
   try {
     // Ensure ownership
     const found = await client.query('SELECT user_id FROM entries WHERE id = $1', [id]);
-    if (found.rowCount === 0) return res.status(404).json({ error: 'not_found' });
-    if (found.rows[0].user_id !== userId) return res.status(403).json({ error: 'forbidden' });
+    if (found.rowCount === 0) return res.status(404).json({ error: 'Entry not found.' });
+    if (found.rows[0].user_id !== userId) return res.status(403).json({ error: 'Access denied.' });
 
     const result = await client.query(
       `UPDATE entries SET start_time=$1, end_time=$2, activity_name=$3, category=$4, energy=$5, intent=$6 WHERE id=$7 RETURNING *`,
@@ -67,7 +67,7 @@ router.put('/:id', async (req, res) => {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error(e);
-    res.status(500).json({ error: 'internal' });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   } finally {
     client.release();
   }
@@ -80,15 +80,15 @@ router.delete('/:id', async (req, res) => {
   const client = await pool.connect();
   try {
     const found = await client.query('SELECT user_id FROM entries WHERE id = $1', [id]);
-    if (found.rowCount === 0) return res.status(404).json({ error: 'not_found' });
-    if (found.rows[0].user_id !== userId) return res.status(403).json({ error: 'forbidden' });
+    if (found.rowCount === 0) return res.status(404).json({ error: 'Entry not found.' });
+    if (found.rows[0].user_id !== userId) return res.status(403).json({ error: 'Access denied.' });
 
     await client.query('DELETE FROM entries WHERE id = $1', [id]);
     res.json({ ok: true });
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error(e);
-    res.status(500).json({ error: 'internal' });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   } finally {
     client.release();
   }
@@ -100,8 +100,9 @@ router.get('/export/json', async (req, res) => {
   const client = await pool.connect();
   try {
     const entries = (await client.query('SELECT * FROM entries WHERE user_id = $1 ORDER BY start_time', [userId])).rows;
-    // reflections not yet implemented, but include placeholder
-    res.json({ entries });
+    const categories = (await client.query('SELECT * FROM categories WHERE user_id = $1 ORDER BY name', [userId])).rows;
+    const reflections = (await client.query('SELECT * FROM reflections WHERE user_id = $1 ORDER BY date DESC', [userId])).rows;
+    res.json({ entries, categories, reflections });
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error(e);
