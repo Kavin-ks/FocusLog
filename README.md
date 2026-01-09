@@ -1,25 +1,50 @@
-# Focuslog — quiet time tracking for reflection
+# Focuslog
 
-Focuslog is a small, privacy-first time tracker that helps you notice patterns without pressure. It’s built for people who want clearer, kinder insight into their days — no scores, no nudges, just facts and gentle context.
+Focuslog supports custom categories, energy and intent tagging, daily and weekly views with baseline comparison, reflections, and rule-based insights. All data is local and privacy-first.
 
-Why I made this
+Why I built this
 
-I wanted a calm place to capture what happened during my day and later look back without feeling judged. Focuslog aims to support honest reflection: light, optional, and kind.
+I wanted a quiet, pressure-free way to notice patterns in my days. The goal is clarity: to help reflection without nudges or scoring.
 
-What you'll find
+What’s in this version (v5)
 
-- Simple manual time tracking (activity name, category, start/end)
-- Custom categories so the app fits how you actually spend time
-- Optional tags: Energy (Low / Neutral / High) and Intent (Intentional / Unintentional)
-- Today and Weekly views with a quiet baseline comparison when there’s enough history
-- Small, rule-based insights that only appear when data is meaningful
-- Local-first: export JSON/CSV and clear data after a calm confirmation
+- Manual time tracking: activity name, category, start and end times
+- Custom categories: Add your own categories alongside built-in ones (Study, Work, Rest, Scroll, Other) to make time tracking more personal
+- Date navigation (Today, Yesterday, or pick a date)
+- Daily timeline and a Week view that summarizes the last 7 days
+- Baseline comparison: Compare current week with the previous week in the Week view
+- Optional tags per entry: Energy (Low / Neutral / High) and Intent (Intentional / Unintentional)
+- Simple, rule-based insights on the Today page (optional to view)
+- Export data (JSON/CSV) and a calm confirmation before removing saved data
 
-How this stays calm and neutral
+Energy & Intent
 
-- Observational language only: we describe patterns ("slightly more time", "about the same") and avoid score-like language.
-- No colors or icons that imply achievement — comparisons are subdued, skimmable, and optional.
-- The app avoids goal-setting and gamification on purpose: this keeps your data honest and reduces pressure.
+- Energy and Intent tags are small, optional fields you can add when logging an entry.
+- They are intentionally neutral and skippable. Older entries without these tags remain compatible.
+
+Custom categories
+
+Focuslog includes built-in categories (Study, Work, Rest, Scroll, Other) but you can add your own to make time tracking more personal. Custom categories appear alongside built-in ones in entry forms and summaries. This helps reflect your unique activities without making the app more complex.
+
+How insights are generated
+
+Insights on the Today page are simple, rule-based observations derived from your entries. They appear only when there's sufficient data (at least 3 entries and 60+ minutes total).
+
+- **Dominant category energy pattern**: Finds your most-used category for the day (excluding Scroll) and checks if 60% or more of time in that category was logged when energy was "High", showing "Most time in [category] was recorded when energy was high."
+- **Unintentional timing pattern**: If 50% or more of unintentional time occurred in a single time-of-day period (morning/afternoon/evening/night), shows which period.
+
+Thresholds are conservative to highlight clear patterns. Insights are optional to view and prioritize observation over judgment.
+
+Data & storage
+
+Data is stored locally and grouped by date (e.g., `time_entries_YYYY_M_D`, `daily_reflection_YYYY_M_D`).
+Exports include the optional tags when present.
+
+Design principles
+
+- Calm, neutral language
+- Minimal UI
+- No productivity scoring or gamification
 
 Run locally
 
@@ -218,6 +243,4 @@ rewrite README in personal voice and clarify project intent.
 
 These decisions prioritize robustness and clear per-day accounting over
 heuristic repairs or opaque defaults.
-
-
 
