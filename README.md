@@ -1,17 +1,18 @@
 # Focuslog
 
-A small, calm tool for keeping a simple record of how you spend your time each day. It runs locally and is private — no accounts, no scores, no streaks.
+Focuslog supports custom categories, energy and intent tagging, daily and weekly views with baseline comparison, reflections, and rule-based insights. All data is local and privacy-first.
 
 Why I built this
 
 I wanted a quiet, pressure-free way to notice patterns in my days. The goal is clarity: to help reflection without nudges or scoring.
 
-What’s in this version (v3)
+What’s in this version (v5)
 
 - Manual time tracking: activity name, category, start and end times
 - Custom categories: Add your own categories alongside built-in ones (Study, Work, Rest, Scroll, Other) to make time tracking more personal
 - Date navigation (Today, Yesterday, or pick a date)
 - Daily timeline and a Week view that summarizes the last 7 days
+- Baseline comparison: Compare current week with the previous week in the Week view
 - Optional tags per entry: Energy (Low / Neutral / High) and Intent (Intentional / Unintentional)
 - Simple, rule-based insights on the Today page (optional to view)
 - Export data (JSON/CSV) and a calm confirmation before removing saved data
@@ -79,6 +80,14 @@ Time is grouped by category to make patterns easy to notice.
 
 The focus is readability, not flashy charts.
 
+Baseline comparison
+
+The Week view includes an option to compare the current week with the previous week (baseline period).
+
+When enabled, category breakdowns show both current and baseline time allocations side by side.
+
+This provides context for weekly patterns without targets or judgments.
+
 Reflection
 
 Each day has a small reflection section.
@@ -118,6 +127,15 @@ If something feels stressful or noisy, it doesn’t belong here.
 Language philosophy
 
 All text in the app uses optional, neutral language to avoid judgment or pressure. Instead of directives like "Fix this" or evaluative terms like "unproductive," the app suggests possibilities (e.g., "You may want to review") and states facts (e.g., "Time recorded"). This creates a calm, reflective space focused on observation rather than evaluation.
+
+## How comparisons work (and what they are not)
+
+- Comparisons are intentionally quiet and optional. They are meant to provide gentle context, not judgments or scores. The UI uses subdued text and spacing (no bright colors or icons) so comparisons are skimmable and non-evaluative.
+- Thresholds and sufficiency: To avoid noisy or misleading signals, comparisons are shown only when there's a reasonably complete baseline (data from at least **4 of the previous 7 days**). Energy timing comparisons use a duration-weighted average start time and conservative thresholds (>= 1.0 hour = notable shift, >= 0.4 hour = small shift). Intent comparisons (unintentional time) compare today's total minutes against the 7-day average; extremely small baselines are treated as absent.
+- Language safety: All comparison text is neutral (e.g., "slightly more time", "about the same", "not enough recent data to compare"). We avoid framing that implies success/failure such as achievement-oriented "increase/decrease" language and avoid using colored signals or arrows that may feel evaluative.
+- Why no goals/scores: Focuslog intentionally avoids goals, scoring, or productivity nudges because those features change how people record and interpret their time (they can introduce pressure and reduce honest reflection). Comparisons are purely observational to support reflection, not to prescribe actions.
+
+
 
 How data is stored
 

@@ -24,6 +24,10 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
   Map<IntentTag, int> _intentTotals = {};
   int _unspecifiedIntent = 0; // minutes without an intent tag
 
+  // Baseline comparison data (previous 7 days)
+  Map<ActivityCategory, int> _baselineCategoryTotals = {};
+  bool _showComparison = false;
+
   bool _loading = true;
   DateTime _weekEndDate = DateTime.now();
 
@@ -41,6 +45,26 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
   Future<void> _loadWeeklyData() async {
     setState(() => _loading = true);
 
+    // Load current week data
+    final currentWeekData = await _loadWeekData(_weekEndDate);
+    
+    // Load baseline data (previous week)
+    final baselineWeekData = await _loadWeekData(_weekEndDate.subtract(const Duration(days: 7)));
+
+    setState(() {
+      _categoryTotals = currentWeekData['categories'] as Map<ActivityCategory, int>;
+      _energyTotals = currentWeekData['energy'] as Map<EnergyLevel, int>;
+      _unspecifiedEnergy = currentWeekData['unspecifiedEnergy'] as int;
+      _intentTotals = currentWeekData['intent'] as Map<IntentTag, int>;
+      _unspecifiedIntent = currentWeekData['unspecifiedIntent'] as int;
+      
+      _baselineCategoryTotals = baselineWeekData['categories'] as Map<ActivityCategory, int>;
+      _loading = false;
+    });
+  }
+
+  /// Helper method to load data for a specific week ending on the given date
+  Future<Map<String, dynamic>> _loadWeekData(DateTime weekEndDate) async {
     final Map<ActivityCategory, int> totals = {};
     final Map<EnergyLevel, int> energyTotals = {};
     final Map<IntentTag, int> intentTotals = {};
@@ -104,14 +128,13 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
       }
     }
 
-    setState(() {
-      _categoryTotals = totals;
-      _energyTotals = energyTotals;
-      _unspecifiedEnergy = unspecifiedEnergy;
-      _intentTotals = intentTotals;
-      _unspecifiedIntent = unspecifiedIntent;
-      _loading = false;
-    });
+    return {
+      'categories': totals,
+      'energy': energyTotals,
+      'unspecifiedEnergy': unspecifiedEnergy,
+      'intent': intentTotals,
+      'unspecifiedIntent': unspecifiedIntent,
+    };
   }
 
   int get _totalMinutes {
@@ -234,7 +257,7 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
                         children: [
                           Text(
                             'Total Time Tracked',
-                            style: Theme.of(context).textTheme.titleMedium,
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           Text(
                             _formatDuration(_totalMinutes),
@@ -248,9 +271,30 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
                   ),
                   const SizedBox(height: 16),
 
+                  // Comparison toggle
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Compare with baseline',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          Switch(
+                            value: _showComparison,
+                            onChanged: (value) => setState(() => _showComparison = value),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
                   // Category breakdown
                   Text(
-                    'Time by Category',
+                    _showComparison ? 'Time by Category (with baseline)' : 'Time by Category',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 12),
@@ -272,6 +316,11 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
                       final percentage = (_totalMinutes > 0) 
                           ? (minutes / _totalMinutes * 100) 
                           : 0.0;
+                      
+                      final baselineMinutes = _baselineCategoryTotals[category] ?? 0;
+                      final baselinePercentage = (_baselineCategoryTotals.values.fold(0, (sum, m) => sum + m) > 0)
+                          ? (baselineMinutes / _baselineCategoryTotals.values.fold(0, (sum, m) => sum + m) * 100)
+                          : 0.0;
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
@@ -291,12 +340,25 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                    Text(
-                                      _formatDuration(minutes),
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          _formatDuration(minutes),
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        if (_showComparison && baselineMinutes > 0)
+                                          Text(
+                                            'Baseline: ${_formatDuration(baselineMinutes)}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -327,6 +389,36 @@ class _WeeklyOverviewScreenState extends State<WeeklyOverviewScreen> {
                                     ),
                                   ],
                                 ),
+                                if (_showComparison && baselineMinutes > 0) ...[
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: LinearProgressIndicator(
+                                            value: baselinePercentage / 100,
+                                            minHeight: 8,
+                                            backgroundColor: Colors.grey[100],
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[400]!),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      SizedBox(
+                                        width: 50,
+                                        child: Text(
+                                          '${baselinePercentage.toStringAsFixed(0)}%',
+                                          style: TextStyle(
+                                            color: Colors.grey[500],
+                                            fontSize: 12,
+                                          ),
+                                          textAlign: TextAlign.right,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                                 const SizedBox(height: 4),
                                 Text(
                                   '${_formatHours(minutes)} hours',

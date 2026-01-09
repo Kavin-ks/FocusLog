@@ -142,6 +142,23 @@ class StorageService {
     }
   }
 
+  Future<List<TimeEntry>> loadEntriesForDateRange(
+    DateTime startDate,
+    DateTime endDate, [
+    List<ActivityCategory>? customCategories,
+  ]) async {
+    final List<TimeEntry> allEntries = [];
+    DateTime current = startDate;
+    
+    while (current.isBefore(endDate) || current.isAtSameMomentAs(endDate)) {
+      final entries = await loadEntries(current, customCategories);
+      allEntries.addAll(entries);
+      current = current.add(const Duration(days: 1));
+    }
+    
+    return allEntries;
+  }
+
   Future<String?> loadReflection(DateTime date) async {
     final prefs = await SharedPreferences.getInstance();
     final key = '${_reflectionKey}_${date.year}_${date.month}_${date.day}';
@@ -153,14 +170,6 @@ class StorageService {
     final key = '${_reflectionKey}_${date.year}_${date.month}_${date.day}';
     await prefs.setString(key, reflection);
   }
-
-  /// Export all stored entries and reflections as a JSON string.
-  /// Returns a JSON string containing all stored time entries and reflections.
-  ///
-  /// The format is a simple map keyed by the internal SharedPreferences key so
-  /// the export is straightforward to parse for re-import or analysis outside
-  /// the app. Keys are left intact (e.g. `time_entries_2026_1_7`) to preserve
-  /// the date context.
   Future<String> exportAllAsJson() async {
     final prefs = await SharedPreferences.getInstance();
     final keys = prefs.getKeys();
@@ -190,7 +199,6 @@ class StorageService {
     return jsonEncode(out);
   }
 
-  /// Export all stored entries as CSV. Each row: date,id,startTime,endTime,activityName,category,durationMinutes,energy,intent
   Future<String> exportAllAsCsv() async {
     final prefs = await SharedPreferences.getInstance();
     final keys = prefs.getKeys();

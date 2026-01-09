@@ -9,10 +9,13 @@ import '../models/time_entry.dart';
 import '../services/storage_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/day_summary.dart';
+import '../widgets/section_header.dart';
+import '../widgets/card_surface.dart';
 // time_entry_card is not directly used in this screen; kept commented for future
 // import '../widgets/time_entry_card.dart';
 import '../widgets/timeline_view.dart';
 import '../widgets/category_summary.dart';
+import '../widgets/baseline_comparison.dart';
 import 'add_entry_dialog.dart';
 import 'weekly_overview_screen.dart';
 import 'settings_screen.dart';
@@ -445,42 +448,39 @@ class _HomeScreenState extends State<HomeScreen> {
 
 
                     // Optional insights (rule-based, non-AI, minimal language)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text('Insights (optional)', style: Theme.of(context).textTheme.bodyMedium),
-                                IconButton(
-                                  icon: Icon(_showInsights ? Icons.visibility_off : Icons.visibility, size: 20),
-                                  tooltip: _showInsights ? 'Hide insights' : 'Show insights',
-                                  onPressed: () => setState(() => _showInsights = !_showInsights),
-                                ),
-                              ],
-                            ),
-                            if (_showInsights) ...[
-                              const SizedBox(height: 6),
-                              Builder(builder: (context) {
-                                final insights = _generateInsights();
-                                if (insights.isEmpty) {
-                                  return Text('No notable insights for today.', style: Theme.of(context).textTheme.bodySmall);
-                                }
-
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: insights.map((s) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: Text('• $s', style: Theme.of(context).textTheme.bodySmall),
-                                  )).toList(),
-                                );
-                              }),
+                    CardSurface(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Insights (optional)', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                              IconButton(
+                                icon: Icon(_showInsights ? Icons.visibility_off : Icons.visibility, size: 20),
+                                tooltip: _showInsights ? 'Hide insights' : 'Show insights',
+                                onPressed: () => setState(() => _showInsights = !_showInsights),
+                              ),
                             ],
+                          ),
+                          if (_showInsights) ...[
+                            const SizedBox(height: 6),
+                            Builder(builder: (context) {
+                              final insights = _generateInsights();
+                              if (insights.isEmpty) {
+                                return Text('No notable insights for today.', style: Theme.of(context).textTheme.bodySmall);
+                              }
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: insights.map((s) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: Text('• $s', style: Theme.of(context).textTheme.bodySmall),
+                                )).toList(),
+                              );
+                            }),
                           ],
-                        ),
+                        ],
                       ),
                     ),
 
@@ -490,12 +490,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     DaySummary(entries: todaysEntries, date: _selectedDate),
                     const SizedBox(height: 16),
 
+                    // Baseline comparison
+                    BaselineComparison(
+                      todayEntries: todaysEntries,
+                      date: _selectedDate,
+                      allCategories: <ActivityCategory>[...ActivityCategory.builtInCategories, ...(_settings?.customCategories ?? [])],
+                    ),
+                    const SizedBox(height: 16),
+
                     // Category summary
                     CategorySummary(entries: todaysEntries),
                     const SizedBox(height: 16),
 
                     // Timeline
-                    const Text('Timeline', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+                    const SectionHeader(title: 'Timeline', showDivider: false),
                     const SizedBox(height: 8),
                     if (todaysEntries.isEmpty)
                       Card(
