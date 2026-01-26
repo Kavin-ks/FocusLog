@@ -22,8 +22,8 @@ class LandingPage extends StatelessWidget {
           floatingActionButton: FloatingActionButton(
             onPressed: () {},
             mini: true,
-            child: const Icon(Icons.nights_stay),
             tooltip: 'Toggle theme',
+            child: const Icon(Icons.nights_stay),
           ),
           body: SingleChildScrollView(
             child: Padding(

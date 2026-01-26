@@ -57,6 +57,11 @@ class _LoginScreenState extends State<LoginScreen> {
               if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
               const SizedBox(height: 8),
               ElevatedButton(onPressed: _loading ? null : _submit, child: _loading ? const CircularProgressIndicator() : const Text('Sign in')),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Navigator.of(context).pushReplacementNamed('/signup'),
+                child: const Text("Don't have an account? Sign up"),
+              ),
             ],
           ),
         ),

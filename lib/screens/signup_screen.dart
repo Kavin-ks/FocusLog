@@ -70,6 +70,11 @@ class _SignupScreenState extends State<SignupScreen> {
               if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
               const SizedBox(height: 8),
               ElevatedButton(onPressed: _loading ? null : _submit, child: _loading ? const CircularProgressIndicator() : const Text('Create account')),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Navigator.of(context).pushReplacementNamed('/login'),
+                child: const Text("Already have an account? Sign in"),
+              ),
             ],
           ),
         ),

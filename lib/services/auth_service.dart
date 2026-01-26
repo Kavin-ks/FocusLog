@@ -1,15 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/widgets.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Auth service that integrates with the backend API.
-/// Handles authentication and caches user data locally.
+/// Simple local-only auth service.
+/// Stores user data in SharedPreferences - no backend required.
 class AuthService extends ChangeNotifier {
   static const _userDataKey = 'user_data';
   static const _isLoggedInKey = 'is_logged_in';
-
-  static const String baseUrl = 'http://localhost:8080/api';
+  static const _usersKey = 'registered_users';
 
   Map<String, dynamic>? _userData;
   bool _isLoggedIn = false;
@@ -30,108 +28,78 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<String?> signup(String name, String email, String password) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/signup'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'name': name, 'email': email, 'password': password}),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        await _handleLoginSuccess(data['user']);
-        return null; // success
-      } else {
-        final error = jsonDecode(response.body) as Map<String, dynamic>;
-        return error['error'] as String?;
-      }
-    } catch (e) {
-      return 'Something went wrong. Please try again later.';
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Get existing users
+    final usersJson = prefs.getString(_usersKey);
+    final Map<String, dynamic> users = usersJson != null 
+        ? jsonDecode(usersJson) as Map<String, dynamic>
+        : {};
+    
+    // Check if email already exists
+    if (users.containsKey(email)) {
+      return 'This email is already in use.';
     }
+    
+    // Register user
+    users[email] = {
+      'name': name,
+      'email': email,
+      'password': password, // In real app, hash this
+    };
+    await prefs.setString(_usersKey, jsonEncode(users));
+    
+    // Auto login after signup
+    await _setLoggedIn(name, email);
+    return null; // success
   }
 
   Future<String?> login(String email, String password) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        await _handleLoginSuccess(data['user']);
-        return null; // success
-      } else {
-        final error = jsonDecode(response.body) as Map<String, dynamic>;
-        return error['error'] as String?;
-      }
-    } catch (e) {
-      return 'Something went wrong. Please try again later.';
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Get existing users
+    final usersJson = prefs.getString(_usersKey);
+    if (usersJson == null) {
+      return 'Invalid email or password.';
     }
+    
+    final Map<String, dynamic> users = jsonDecode(usersJson) as Map<String, dynamic>;
+    
+    // Check credentials
+    if (!users.containsKey(email)) {
+      return 'Invalid email or password.';
+    }
+    
+    final user = users[email] as Map<String, dynamic>;
+    if (user['password'] != password) {
+      return 'Invalid email or password.';
+    }
+    
+    // Login success
+    await _setLoggedIn(user['name'] as String, email);
+    return null; // success
   }
 
   Future<String?> logout() async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/logout'),
-        headers: {'Content-Type': 'application/json'},
-      );
-
-      if (response.statusCode == 200) {
-        await _clearCache();
-        return null; // success
-      } else {
-        final error = jsonDecode(response.body) as Map<String, dynamic>;
-        return error['error'] as String?;
-      }
-    } catch (e) {
-      return 'Something went wrong. Please try again later.';
-    }
+    await _clearCache();
+    return null; // success
   }
 
-  Future<void> _handleLoginSuccess(Map<String, dynamic> user) async {
-    // Fetch user data
-    final data = await _fetchUserData();
-    if (data != null) {
-      _userData = data;
-      _isLoggedIn = true;
+  Future<void> _setLoggedIn(String name, String email) async {
+    _userData = {
+      'name': name,
+      'email': email,
+      'entries': [],
+      'categories': [],
+      'reflections': [],
+    };
+    _isLoggedIn = true;
 
-      // Cache locally
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_userDataKey, jsonEncode(data));
-      await prefs.setBool(_isLoggedInKey, true);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userDataKey, jsonEncode(_userData));
+    await prefs.setBool(_isLoggedInKey, true);
 
-      notifyListeners();
-    }
-  }
-
-  Future<Map<String, dynamic>?> _fetchUserData() async {
-    try {
-      // Fetch entries
-      final entriesResponse = await http.get(Uri.parse('$baseUrl/entries'));
-      if (entriesResponse.statusCode != 200) return null;
-
-      // Fetch categories
-      final categoriesResponse = await http.get(Uri.parse('$baseUrl/categories'));
-      if (categoriesResponse.statusCode != 200) return null;
-
-      // Fetch reflections
-      final reflectionsResponse = await http.get(Uri.parse('$baseUrl/reflections'));
-      if (reflectionsResponse.statusCode != 200) return null;
-
-      final entries = jsonDecode(entriesResponse.body) as Map<String, dynamic>;
-      final categories = jsonDecode(categoriesResponse.body) as Map<String, dynamic>;
-      final reflections = jsonDecode(reflectionsResponse.body) as Map<String, dynamic>;
-
-      return {
-        'entries': entries['entries'],
-        'categories': categories['categories'],
-        'reflections': reflections['reflections'],
-      };
-    } catch (e) {
-      return null;
-    }
+    notifyListeners();
   }
 
   Future<void> _clearCache() async {

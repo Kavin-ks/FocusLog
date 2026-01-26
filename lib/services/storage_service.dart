@@ -20,23 +20,8 @@ class StorageService {
     DateTime date, [
     List<ActivityCategory>? customCategories,
   ]) async {
-    if (_authService.isLoggedIn) {
-      // Load from cached data
-      final cachedEntries = _authService.getCachedEntries();
-      final dateStr =
-          '${date.year}-${date.month.toString().padLeft(2, "0")}-${date.day.toString().padLeft(2, "0")}';
-      final filtered = cachedEntries.where((entry) {
-        final startDate = DateTime.parse(entry['start_time']).toLocal();
-        final entryDateStr =
-            '${startDate.year}-${startDate.month.toString().padLeft(2, "0")}-${startDate.day.toString().padLeft(2, "0")}';
-        return entryDateStr == dateStr;
-      }).toList();
-
-      return filtered
-          .map((e) => TimeEntry.fromJson(e, customCategories))
-          .toList();
-    } else {
-      // Fallback to local storage for demo mode
+    // Always use local storage for simplicity as per user request
+    {
       final prefs = await SharedPreferences.getInstance();
       final key = _getEntriesKeyForDate(date);
       final String? entriesJson = prefs.getString(key);
